@@ -68,11 +68,13 @@ void LearnerSender :: run()
 
 ////////////////////////////////////////
 
+// 计算最后一次发送时间
 void LearnerSender :: ReleshSending()
 {
     m_llAbsLastSendTime = Time::GetSteadyClockMS();
 }
 
+// 判断是不是在发送数据
 const bool LearnerSender :: IsIMSending()
 {
     if (!m_bIsIMSending)
@@ -80,9 +82,11 @@ const bool LearnerSender :: IsIMSending()
         return false;
     }
 
+    // 计算已经过去的时间长
     uint64_t llNowTime = Time::GetSteadyClockMS();
     uint64_t llPassTime = llNowTime > m_llAbsLastSendTime ? llNowTime - m_llAbsLastSendTime : 0;
 
+    // 超过prepare的时长就返回false
     if ((int)llPassTime >= LearnerSender_PREPARE_TIMEOUT)
     {
         return false;
@@ -91,8 +95,10 @@ const bool LearnerSender :: IsIMSending()
     return true;
 }
 
+// 检查该实例ID是否已经应答
 const bool LearnerSender :: CheckAck(const uint64_t llSendInstanceID)
 {
+    // 小于当前ack的实例ID，那么一定是已经应答过的
     if (llSendInstanceID < m_llAckInstanceID)
     {
         PLGImp("Already catch up, ack instanceid %lu now send instanceid %lu", 
@@ -105,6 +111,7 @@ const bool LearnerSender :: CheckAck(const uint64_t llSendInstanceID)
         uint64_t llNowTime = Time::GetSteadyClockMS();
         uint64_t llPassTime = llNowTime > m_llAbsLastAckTime ? llNowTime - m_llAbsLastAckTime : 0;
 
+        // 超过了ACK的时长，返回false
         if ((int)llPassTime >= LearnerSender_ACK_TIMEOUT)
         {
             BP->GetLearnerBP()->SenderAckTimeout();
@@ -124,6 +131,7 @@ const bool LearnerSender :: CheckAck(const uint64_t llSendInstanceID)
 
 //////////////////////////////////////////////////////////////////////////
 
+// 准备阶段，设置一些数据之后返回
 const bool LearnerSender :: Prepare(const uint64_t llBeginInstanceID, const nodeid_t iSendToNodeID)
 {
     m_oLock.Lock();
@@ -150,6 +158,7 @@ const bool LearnerSender :: Comfirm(const uint64_t llBeginInstanceID, const node
 
     bool bComfirmRet = false;
 
+    // 只有还在发送而且还没有确定的情况下
     if (IsIMSending() && (!m_bIsComfirmed))
     {
         if (m_llBeginInstanceID == llBeginInstanceID && m_iSendToNodeID == iSendToNodeID)
@@ -187,11 +196,13 @@ void LearnerSender :: Ack(const uint64_t llAckInstanceID, const nodeid_t iFromNo
 
 ///////////////////////////////////////////////
 
+// 等待发送消息的条件满足为止
 void LearnerSender :: WaitToSend()
 {
     m_oLock.Lock();
     while (!m_bIsComfirmed)
     {
+        // 等1000ms
         m_oLock.WaitTime(1000);
         if (m_bIsEnd)
         {
@@ -201,6 +212,7 @@ void LearnerSender :: WaitToSend()
     m_oLock.UnLock();
 }
 
+// 向iSendToNodeID发送学习到的数据,从llBeginInstanceID开始
 void LearnerSender :: SendLearnedValue(const uint64_t llBeginInstanceID, const nodeid_t iSendToNodeID)
 {
     PLGHead("BeginInstanceID %lu SendToNodeID %lu", llBeginInstanceID, iSendToNodeID);
@@ -211,6 +223,7 @@ void LearnerSender :: SendLearnedValue(const uint64_t llBeginInstanceID, const n
     uint32_t iLastChecksum = 0;
 
     //control send speed to avoid affecting the network too much.
+    // 控制发送频率的参数
     int iSendQps = LearnerSender_SEND_QPS;
     int iSleepMs = iSendQps > 1000 ? 1 : 1000 / iSendQps;
     int iSendInterval = iSendQps > 1000 ? iSendQps / 1000 + 1 : 1; 
@@ -238,6 +251,7 @@ void LearnerSender :: SendLearnedValue(const uint64_t llBeginInstanceID, const n
         llSendInstanceID++;
         ReleshSending();
 
+        // 控制一下发送频率
         if (iSendCount >= iSendInterval)
         {
             iSendCount = 0;
@@ -252,6 +266,7 @@ int LearnerSender :: SendOne(const uint64_t llSendInstanceID, const nodeid_t iSe
 {
     BP->GetLearnerBP()->SenderSendOnePaxosLog();
 
+    // 从log中读取llSendInstanceID的状态数据
     AcceptorStateData oState;
     int ret = m_poPaxosLog->ReadState(m_poConfig->GetMyGroupIdx(), llSendInstanceID, oState);
     if (ret != 0)
@@ -259,8 +274,10 @@ int LearnerSender :: SendOne(const uint64_t llSendInstanceID, const nodeid_t iSe
         return ret;
     }
 
+    // 反序列化到数据中
     BallotNumber oBallot(oState.acceptedid(), oState.acceptednodeid());
 
+    // 通过learner发送数据
     ret = m_poLearner->SendLearnValue(iSendToNodeID, llSendInstanceID, oBallot, oState.acceptedvalue(), iLastChecksum);
 
     iLastChecksum = oState.checksum();
@@ -268,6 +285,7 @@ int LearnerSender :: SendOne(const uint64_t llSendInstanceID, const nodeid_t iSe
     return ret;
 }
 
+// 发送完成，重置一些状态数据
 void LearnerSender :: SendDone()
 {
     m_oLock.Lock();

@@ -130,6 +130,7 @@ int MasterStateMachine :: LearnMaster(
     {
         //other be master
         //use new start timeout
+        // 计算过期时间
         m_llAbsExpireTime = Time::GetSteadyClockMS() + oMasterOper.timeout();
 
         PLG1Head("Ohter be master, absexpiretime %lu", m_llAbsExpireTime);
@@ -150,10 +151,12 @@ void MasterStateMachine :: SafeGetMaster(nodeid_t & iMasterNodeID, uint64_t & ll
 
     if (Time::GetSteadyClockMS() >= m_llAbsExpireTime)
     {
+        // 超过过期时间，返回null
         iMasterNodeID = nullnode;
     }
     else
     {
+        // 否则就返回
         iMasterNodeID = m_iMasterNodeID;
     }
 
@@ -162,6 +165,7 @@ void MasterStateMachine :: SafeGetMaster(nodeid_t & iMasterNodeID, uint64_t & ll
 
 const nodeid_t MasterStateMachine :: GetMaster() const
 {
+    // 跟SafeGetMaster对比，少了加锁的地方
     if (Time::GetSteadyClockMS() >= m_llAbsExpireTime)
     {
         return nullnode;

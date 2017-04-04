@@ -51,6 +51,7 @@ int MasterDamon :: Init()
 
 void MasterDamon :: SetLeaseTime(const int iLeaseTimeMs)
 {
+    // leasetime不得小于1000ms
     if (iLeaseTimeMs < 1000)
     {
         return;
@@ -120,8 +121,10 @@ void MasterDamon :: TryBeMaster(const int iLeaseTime)
     uint64_t llMasterVersion = 0;
 
     //step 1 check exist master and get version
+    // 首先拿到当前的master信息
     m_oDefaultMasterSM.SafeGetMaster(iMasterNodeID, llMasterVersion);
 
+    // 如果当前已经存在master，并且不是本节点，那么就返回
     if (iMasterNodeID != nullnode && (iMasterNodeID != m_poPaxosNode->GetMyNodeID()))
     {
         PLG1Imp("Ohter as master, can't try be master, masterid %lu myid %lu", 
@@ -130,6 +133,7 @@ void MasterDamon :: TryBeMaster(const int iLeaseTime)
     }
 
     //step 2 try be master
+    // 根据当前信息，序列化待提交的paxos value返回
     std::string sPaxosValue;
     if (!MasterStateMachine::MakeOpValue(
                 m_poPaxosNode->GetMyNodeID(),
@@ -151,6 +155,7 @@ void MasterDamon :: TryBeMaster(const int iLeaseTime)
     oCtx.m_iSMID = MASTER_V_SMID;
     oCtx.m_pCtx = (void *)&llAbsMasterTimeout;
 
+    // 提交提议，即申请成为这一次的master
     m_poPaxosNode->Propose(m_iMyGroupIdx, sPaxosValue, llCommitInstanceID, &oCtx);
 }
 

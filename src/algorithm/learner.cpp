@@ -72,6 +72,7 @@ int LearnerState :: LearnValue(const uint64_t llInstanceID, const BallotNumber &
         m_iNewChecksum = crc32(iLastChecksum, (const uint8_t *)sValue.data(), sValue.size(), CRC32SKIP);
     }
     
+    // 向log中写入accept状态数据
     AcceptorStateData oState;
     oState.set_instanceid(llInstanceID);
     oState.set_acceptedvalue(sValue);

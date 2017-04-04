@@ -46,6 +46,8 @@ bool SMFac :: Execute(const int iGroupIdx, const uint64_t llInstanceID, const st
         return true;
     }
 
+    // 首先从传入的value中把数据decode出来
+    // 最开始的int时SMID
     int iSMID = 0;
     memcpy(&iSMID, sPaxosValue.data(), sizeof(int));
 
@@ -55,9 +57,11 @@ bool SMFac :: Execute(const int iGroupIdx, const uint64_t llInstanceID, const st
         return true;
     }
 
+    // 紧跟着的是body数据
     std::string sBodyValue = string(sPaxosValue.data() + sizeof(int), sPaxosValue.size() - sizeof(int));
     if (iSMID == BATCH_PROPOSE_SMID)
     {
+        // 如果是batch提交
         BatchSMCtx * poBatchSMCtx = nullptr;
         if (poSMCtx != nullptr && poSMCtx->m_pCtx != nullptr)
         {
@@ -71,8 +75,10 @@ bool SMFac :: Execute(const int iGroupIdx, const uint64_t llInstanceID, const st
     }
 }
 
+// 批量提交
 bool SMFac :: BatchExecute(const int iGroupIdx, const uint64_t llInstanceID, const std::string & sBodyValue, BatchSMCtx * poBatchSMCtx)
 {
+    // 先decode出batch value
     BatchPaxosValues oBatchValues;
     bool bSucc = oBatchValues.ParseFromArray(sBodyValue.data(), sBodyValue.size());
     if (!bSucc)
@@ -83,6 +89,7 @@ bool SMFac :: BatchExecute(const int iGroupIdx, const uint64_t llInstanceID, con
 
     if (poBatchSMCtx != nullptr) 
     {
+        // 要判断一下批量提交的数据数量和前面decode出来的value数量是否一致
         if ((int)poBatchSMCtx->m_vecSMCtxList.size() != oBatchValues.values_size())
         {
             PLG1Err("values size %d not equal to smctx size %zu",
@@ -91,6 +98,7 @@ bool SMFac :: BatchExecute(const int iGroupIdx, const uint64_t llInstanceID, con
         }
     }
 
+    // 到了这里，一个循环遍历里面的value逐个进行提交
     for (int i = 0; i < oBatchValues.values_size(); i++)
     {
         const PaxosValue & oValue = oBatchValues.values(i);
@@ -105,6 +113,7 @@ bool SMFac :: BatchExecute(const int iGroupIdx, const uint64_t llInstanceID, con
     return true;
 }
 
+// 提交数据的主函数
 bool SMFac :: DoExecute(const int iGroupIdx, const uint64_t llInstanceID, 
         const std::string & sBodyValue, const int iSMID, SMCtx * poSMCtx)
 {
@@ -122,6 +131,7 @@ bool SMFac :: DoExecute(const int iGroupIdx, const uint64_t llInstanceID,
 
     for (auto & poSM : m_vecSMList)
     {
+        // 只有针对相同SMID的状态机才进行提交
         if (poSM->SMID() == iSMID)
         {
             return poSM->Execute(iGroupIdx, llInstanceID, sBodyValue, poSMCtx);
@@ -233,6 +243,7 @@ void SMFac :: AddSM(StateMachine * poSM)
 {
     for (auto & poSMt : m_vecSMList)
     {
+        // 不能有多个相同SMID的状态机
         if (poSMt->SMID() == poSM->SMID())
         {
             return;

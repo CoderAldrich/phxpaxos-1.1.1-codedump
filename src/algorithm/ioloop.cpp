@@ -51,10 +51,12 @@ void IOLoop :: run()
 
         int iNextTimeout = 1000;
         
+        // 处理超时消息
         DealwithTimeout(iNextTimeout);
 
         //PLGHead("nexttimeout %d", iNextTimeout);
 
+        // 处理下一次循环
         OneLoop(iNextTimeout);
 
         if (m_bIsEnd)
@@ -68,6 +70,7 @@ void IOLoop :: run()
 void IOLoop :: AddNotify()
 {
     m_oMessageQueue.lock();
+    // 添加一个null消息，以唤醒队列？？
     m_oMessageQueue.add(nullptr);
     m_oMessageQueue.unlock();
 }
@@ -78,6 +81,7 @@ int IOLoop :: AddMessage(const char * pcMessage, const int iMessageLen)
 
     BP->GetIOLoopBP()->EnqueueMsg();
 
+    // 不要超过队列容量
     if ((int)m_oMessageQueue.size() > QUEUE_MAXLENGTH)
     {
         BP->GetIOLoopBP()->EnqueueMsgRejectByFullQueue();
@@ -87,6 +91,7 @@ int IOLoop :: AddMessage(const char * pcMessage, const int iMessageLen)
         return -2;
     }
 
+    // 不要超过队列内存容量
     if (m_iQueueMemSize > MAX_QUEUE_MEM_SIZE)
     {
         PLErr("queue memsize %d too large, can't enqueue", m_iQueueMemSize);
@@ -103,6 +108,7 @@ int IOLoop :: AddMessage(const char * pcMessage, const int iMessageLen)
     return 0;
 }
 
+// 添加需要重试的paxos消息
 int IOLoop :: AddRetryPaxosMsg(const PaxosMsg & oPaxosMsg)
 {
     BP->GetIOLoopBP()->EnqueueRetryMsg();
@@ -134,6 +140,7 @@ void IOLoop :: ClearRetryQueue()
     }
 }
 
+// 处理retry消息
 void IOLoop :: DealWithRetry()
 {
     if (m_oRetryQueue.empty())
@@ -142,9 +149,11 @@ void IOLoop :: DealWithRetry()
     }
     
     bool bHaveRetryOne = false;
+    // 从retry队列中取出消息进行处理
     while (!m_oRetryQueue.empty())
     {
         PaxosMsg & oPaxosMsg = m_oRetryQueue.front();
+        // 消息ID大于当前实例ID+1,退出循环
         if (oPaxosMsg.instanceid() > m_poInstance->GetNowInstanceID() + 1)
         {
             break;
@@ -237,6 +246,7 @@ void IOLoop :: RemoveTimer(uint32_t & iTimerID)
 
 void IOLoop :: DealwithTimeoutOne(const uint32_t iTimerID, const int iType)
 {
+    // 根据ID查找超时信息
     auto it = m_mapTimerIDExist.find(iTimerID);
     if (it == end(m_mapTimerIDExist))
     {
@@ -244,11 +254,13 @@ void IOLoop :: DealwithTimeoutOne(const uint32_t iTimerID, const int iType)
         return;
     }
 
+    // 删除超时消息
     m_mapTimerIDExist.erase(it);
 
     m_poInstance->OnTimeout(iTimerID, iType);
 }
 
+// 处理超时
 void IOLoop :: DealwithTimeout(int & iNextTimeout)
 {
     bool bHasTimeout = true;
@@ -257,15 +269,19 @@ void IOLoop :: DealwithTimeout(int & iNextTimeout)
     {
         uint32_t iTimerID = 0;
         int iType = 0;
+        // 取出一个超时消息ID
         bHasTimeout = m_oTimer.PopTimeout(iTimerID, iType);
 
         if (bHasTimeout)
         {
+            // 处理这个超时消息
             DealwithTimeoutOne(iTimerID, iType);
 
+            // 拿到下一个超时信息
             iNextTimeout = m_oTimer.GetNextTimeout();
             if (iNextTimeout != 0)
             {
+                // 没有就退出循环
                 break;
             }
         }

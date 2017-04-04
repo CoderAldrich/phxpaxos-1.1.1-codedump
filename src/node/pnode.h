@@ -34,6 +34,7 @@ See the AUTHORS file for names of contributors.
 namespace phxpaxos
 {
 
+// 一个pnode代表一个paxos节点
 class PNode : public Node
 {
 public:
@@ -118,6 +119,7 @@ private:
     DFNetWork m_oDefaultNetWork;
     NotifierPool m_oNotifierPool;
 
+    // 本节点信息
     nodeid_t m_iMyNodeID;
 };
     

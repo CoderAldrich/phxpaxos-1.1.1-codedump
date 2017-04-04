@@ -91,6 +91,7 @@ int Committer :: NewValueGetIDNoRetry(const std::string & sValue, uint64_t & llI
 
     int iLockUseTimeMs = 0;
     bool bHasLock = m_oWaitLock.Lock(m_iTimeoutMs, iLockUseTimeMs);
+    // 没有拿到锁
     if (!bHasLock)
     {
         if (iLockUseTimeMs > 0)
@@ -107,9 +108,11 @@ int Committer :: NewValueGetIDNoRetry(const std::string & sValue, uint64_t & llI
         }
     }
 
+    // 到了这里就是拿到锁的情况
     int iLeftTimeoutMs = -1;
     if (m_iTimeoutMs > 0)
     {
+        // 计算剩余时间是不是过少（小于200ms）
         iLeftTimeoutMs = m_iTimeoutMs > iLockUseTimeMs ? m_iTimeoutMs - iLockUseTimeMs : 0;
         if (iLeftTimeoutMs < 200)
         {

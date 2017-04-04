@@ -67,6 +67,7 @@ message SystemVariables
 	required uint64 Version = 3;
 };
 
+// src/master/master_variables_store.cpp负责写这个数据到log中
 message MasterVariables
 {
 	required uint64 MasterNodeid = 1;
