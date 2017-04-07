@@ -33,7 +33,7 @@ namespace phxpaxos
 #define HEADLEN_LEN (sizeof(uint16_t))
 #define CHECKSUM_LEN (sizeof(uint32_t))
 
-
+// 封装了nodeid和proposeid的类
 class BallotNumber
 {
 public:

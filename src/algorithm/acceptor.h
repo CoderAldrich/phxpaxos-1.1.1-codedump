@@ -29,6 +29,7 @@ See the AUTHORS file for names of contributors.
 namespace phxpaxos
 {
 
+// 保存acceptor状态数据的类
 class AcceptorState
 {
 public:
@@ -52,8 +53,11 @@ public:
     int Load(uint64_t & llInstanceID);
 
 //private:
+    // promise信息
     BallotNumber m_oPromiseBallot;
+    // accept信息
     BallotNumber m_oAcceptedBallot;
+    // accept值
     std::string m_sAcceptedValue;
     uint32_t m_iChecksum;
 
