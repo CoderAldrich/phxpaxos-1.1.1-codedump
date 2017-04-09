@@ -38,6 +38,7 @@ See the AUTHORS file for names of contributors.
 namespace phxpaxos
 {
 
+// 保存一个实例信息的类
 class Instance
 {
 public:

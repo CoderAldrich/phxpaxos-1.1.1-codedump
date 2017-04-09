@@ -41,6 +41,7 @@ IOLoop :: ~IOLoop()
 {
 }
 
+// IO主函数
 void IOLoop :: run()
 {
     m_bIsEnd = false;
@@ -113,6 +114,7 @@ int IOLoop :: AddRetryPaxosMsg(const PaxosMsg & oPaxosMsg)
 {
     BP->GetIOLoopBP()->EnqueueRetryMsg();
 
+    // 如果超出大小，那么先pop一个出来
     if (m_oRetryQueue.size() > RETRY_QUEUE_MAX_LEN)
     {
         BP->GetIOLoopBP()->EnqueueRetryMsgRejectByFullQueue();
@@ -158,22 +160,27 @@ void IOLoop :: DealWithRetry()
         {
             break;
         }
+        // 消息ID等于当前实例ID+1
         else if (oPaxosMsg.instanceid() == m_poInstance->GetNowInstanceID() + 1)
         {
             //only after retry i == now_i, than we can retry i + 1.
             if (bHaveRetryOne)
             {
+                // 只有在之前已经有处理retry消息的情况下才进行处理
                 BP->GetIOLoopBP()->DealWithRetryMsg();
                 PLGDebug("retry msg (i+1). instanceid %lu", oPaxosMsg.instanceid());
                 m_poInstance->OnReceivePaxosMsg(oPaxosMsg, true);
             }
             else
             {
+                // 否则退出循环
                 break;
             }
         }
+        // 消息ID等于当前实例ID
         else if (oPaxosMsg.instanceid() == m_poInstance->GetNowInstanceID())
         {
+            // 处理这个消息
             BP->GetIOLoopBP()->DealWithRetryMsg();
             PLGDebug("retry msg. instanceid %lu", oPaxosMsg.instanceid());
             m_poInstance->OnReceivePaxosMsg(oPaxosMsg);
@@ -189,6 +196,7 @@ void IOLoop :: OneLoop(const int iTimeoutMs)
     std::string * psMessage = nullptr;
 
     m_oMessageQueue.lock();
+    // 在消息队列中最长等待等待iTimeoutMs时间
     bool bSucc = m_oMessageQueue.peek(psMessage, iTimeoutMs);
     
     if (!bSucc)

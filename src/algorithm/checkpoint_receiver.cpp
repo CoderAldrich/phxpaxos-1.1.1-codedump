@@ -75,8 +75,10 @@ int CheckpointReceiver :: NewReceiver(const nodeid_t iSenderNodeID, const uint64
     return 0;
 }
 
+// 清空临时目录
 int CheckpointReceiver :: ClearCheckpointTmp()
 {
+    // 根据groupid得到路径
     string sLogStoragePath = m_poLogStorage->GetLogStorageDirPath(m_poConfig->GetMyGroupIdx());
 
     DIR * dir = nullptr;
@@ -88,11 +90,14 @@ int CheckpointReceiver :: ClearCheckpointTmp()
         return -1;
     }
 
+    // 遍历该路径下面的所有文件
     int ret = 0;
     while ((ptr = readdir(dir)) != nullptr)
     {
+        // 名字中带有这个字符串的就是临时目录
         if (string(ptr->d_name).find("cp_tmp_") != std::string::npos)
         {
+            // 删除目录
             char sChildPath[1024] = {0};
             snprintf(sChildPath, sizeof(sChildPath), "%s/%s", sLogStoragePath.c_str(), ptr->d_name);
             ret = FileUtils::DeleteDir(sChildPath);

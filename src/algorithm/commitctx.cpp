@@ -132,6 +132,7 @@ void CommitCtx :: SetResult(
 
 int CommitCtx :: GetResult(uint64_t & llSuccInstanceID)
 {
+    // 一直等待提交结束
     while (!m_bIsCommitEnd)
     {
         m_oSerialLock.WaitTime(1000);

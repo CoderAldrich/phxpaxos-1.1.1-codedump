@@ -96,12 +96,14 @@ int Committer :: NewValueGetIDNoRetry(const std::string & sValue, uint64_t & llI
     {
         if (iLockUseTimeMs > 0)
         {
+            // 超时
             BP->GetCommiterBP()->NewValueGetLockTimeout();
             PLGErr("Try get lock, but timeout, lockusetime %dms", iLockUseTimeMs);
             return PaxosTryCommitRet_Timeout; 
         }
         else
         {
+            // 被拒绝
             BP->GetCommiterBP()->NewValueGetLockReject();
             PLGErr("Try get lock, but too many thread waiting, reject");
             return PaxosTryCommitRet_TooManyThreadWaiting_Reject;
@@ -133,9 +135,11 @@ int Committer :: NewValueGetIDNoRetry(const std::string & sValue, uint64_t & llI
     int iSMID = poSMCtx != nullptr ? poSMCtx->m_iSMID : 0;
     
     string sPackSMIDValue = sValue;
+    // 组装提交的paxos值
     m_poSMFac->PackPaxosValue(sPackSMIDValue, iSMID);
 
     m_poCommitCtx->NewCommit(&sPackSMIDValue, poSMCtx, iLeftTimeoutMs);
+    // 这里怎么理解
     m_poIOLoop->AddNotify();
 
     int ret = m_poCommitCtx->GetResult(llInstanceID);

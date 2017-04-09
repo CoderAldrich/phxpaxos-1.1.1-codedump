@@ -47,6 +47,7 @@ CheckpointSender :: CheckpointSender(
 {
     m_bIsEnded = false;
     m_bIsEnd = false;
+    // UUID组合了node id、实例ID，以及一个随机数
     m_llUUID = (m_poConfig->GetMyNodeID() ^ m_poLearner->GetInstanceID()) + OtherUtils::FastRand();
     m_llSequence = 0;
 
@@ -83,6 +84,7 @@ void CheckpointSender :: run()
 
     //pause checkpoint replayer
     bool bNeedContinue = false;
+    // 得到replayer暂停
     while (!m_poCheckpointMgr->GetReplayer()->IsPaused())
     {
         if (m_bIsEnd)
@@ -98,6 +100,7 @@ void CheckpointSender :: run()
         Time::MsSleep(100);
     }
 
+    // 加锁检查点之后发送数据
     int ret = LockCheckpoint();
     if (ret == 0)
     {
@@ -107,6 +110,7 @@ void CheckpointSender :: run()
         UnLockCheckpoint();
     }
 
+    // 继续前面暂停的replayer的执行
     //continue checkpoint replayer
     if (bNeedContinue)
     {
@@ -122,6 +126,7 @@ int CheckpointSender :: LockCheckpoint()
     std::vector<StateMachine *> vecSMList = m_poSMFac->GetSMList();
     std::vector<StateMachine *> vecLockSMList;
     int ret = 0;
+    // 遍历所有的SM进行加锁操作
     for (auto & poSM : vecSMList)
     {
         ret = poSM->LockCheckpointState();
@@ -133,6 +138,7 @@ int CheckpointSender :: LockCheckpoint()
         vecLockSMList.push_back(poSM);
     }
 
+    // 前面任何一个加锁操作没有完成的清空下就要解锁
     if (ret != 0)
     {
         for (auto & poSM : vecLockSMList)
@@ -155,6 +161,7 @@ void CheckpointSender :: UnLockCheckpoint()
 
 void CheckpointSender :: SendCheckpoint()
 {
+    // 发送ck之前的准备
     int ret = m_poLearner->SendCheckpointBegin(
             m_iSendNodeID, m_llUUID, m_llSequence, 
             m_poSMFac->GetCheckpointInstanceID(m_poConfig->GetMyGroupIdx()));
@@ -177,6 +184,7 @@ void CheckpointSender :: SendCheckpoint()
 
     m_llSequence++;
 
+    // 遍历所有的sm进行发送操作
     std::vector<StateMachine *> vecSMList = m_poSMFac->GetSMList();
     for (auto & poSM : vecSMList)
     {
@@ -187,6 +195,7 @@ void CheckpointSender :: SendCheckpoint()
         }
     }
 
+    // 结束发送ck操作
     ret = m_poLearner->SendCheckpointEnd(
             m_iSendNodeID, m_llUUID, m_llSequence, 
             m_poSMFac->GetCheckpointInstanceID(m_poConfig->GetMyGroupIdx()));
@@ -203,6 +212,7 @@ int CheckpointSender :: SendCheckpointFofaSM(StateMachine * poSM)
     string sDirPath;
     std::vector<std::string> vecFileList;
 
+    // 通过SM、groupid查询目录和文件列表
     int ret = poSM->GetCheckpointState(m_poConfig->GetMyGroupIdx(), sDirPath, vecFileList);
     if (ret != 0)
     {
@@ -221,6 +231,7 @@ int CheckpointSender :: SendCheckpointFofaSM(StateMachine * poSM)
         sDirPath += '/';
     }
 
+    // 遍历文件进行发送
     for (auto & sFilePath : vecFileList)
     {
         ret = SendFile(poSM, sDirPath, sFilePath);
@@ -241,6 +252,7 @@ int CheckpointSender :: SendFile(const StateMachine * poSM, const std::string & 
 
     string sPath = sDirPath + sFilePath;
 
+    // 首先去已发送文件map中查询一下是否已经发送过了
     if (m_mapAlreadySendedFile.find(sPath) != end(m_mapAlreadySendedFile))
     {
         PLGErr("file already send, filepath %s", sPath.c_str());
@@ -356,12 +368,14 @@ void CheckpointSender :: Ack(const nodeid_t iSendNodeID, const uint64_t llUUID, 
         return;
     }
 
+    // ack之后要把ack seq递增1
     m_llAckSequence++;
     m_llAbsLastAckTime = Time::GetSteadyClockMS();
 }
 
 const bool CheckpointSender :: CheckAck(const uint64_t llSendSequence)
 {
+    // 这个函数一直等待ack seq+Checkpoint_ACK_LEAD >= 传入的send seq才停止
     while (llSendSequence > m_llAckSequence + Checkpoint_ACK_LEAD)
     {
         uint64_t llNowTime = Time::GetSteadyClockMS();

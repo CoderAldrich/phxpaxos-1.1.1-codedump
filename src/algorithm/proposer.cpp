@@ -57,6 +57,7 @@ void ProposerState :: NewPrepare()
     uint64_t llMaxProposalID =
         m_llProposalID > m_llHighestOtherProposalID ? m_llProposalID : m_llHighestOtherProposalID;
 
+    // 新的propose ID为前面最大提交ID+1
     m_llProposalID = llMaxProposalID + 1;
 
     PLGHead("END New.ProposalID %lu", m_llProposalID);
@@ -78,6 +79,7 @@ void ProposerState :: AddPreAcceptValue(
         return;
     }
     
+    // 要大于当前保存的才能保存下来
     if (oOtherPreAcceptBallot > m_oHighestOtherPreAcceptBallot)
     {
         m_oHighestOtherPreAcceptBallot = oOtherPreAcceptBallot;
@@ -102,6 +104,7 @@ void ProposerState :: SetValue(const std::string & sValue)
 
 void ProposerState :: SetOtherProposalID(const uint64_t llOtherProposalID)
 {
+    // 只有比原来的大才能保存
     if (llOtherProposalID > m_llHighestOtherProposalID)
     {
         m_llHighestOtherProposalID = llOtherProposalID;
@@ -152,6 +155,7 @@ void Proposer :: SetStartProposalID(const uint64_t llProposalID)
     m_oProposerState.SetStartProposalID(llProposalID);
 }
 
+// 初始化实例的状态
 void Proposer :: InitForNewPaxosInstance()
 {
     m_oMsgCounter.StartNewRound();
@@ -161,11 +165,13 @@ void Proposer :: InitForNewPaxosInstance()
     ExitAccept();
 }
 
+// 在准备阶段或者提交阶段
 bool Proposer :: IsWorking()
 {
     return m_bIsPreparing || m_bIsAccepting;
 }
 
+// 提交一个新的值
 int Proposer :: NewValue(const std::string & sValue)
 {
     BP->GetProposerBP()->NewProposal(sValue);
@@ -175,11 +181,13 @@ int Proposer :: NewValue(const std::string & sValue)
         m_oProposerState.SetValue(sValue);
     }
 
+    // 超时时间
     m_iLastPrepareTimeoutMs = START_PREPARE_TIMEOUTMS;
     m_iLastAcceptTimeoutMs = START_ACCEPT_TIMEOUTMS;
 
     if (m_bCanSkipPrepare && !m_bWasRejectBySomeone)
     {
+        // 在可以忽略的情况下才能直接接受
         BP->GetProposerBP()->NewProposalSkipPrepare();
 
         PLGHead("skip prepare, directly start accept");
@@ -200,6 +208,7 @@ void Proposer :: ExitPrepare()
     {
         m_bIsPreparing = false;
         
+        // 移除准备阶段设置的timer
         m_poIOLoop->RemoveTimer(m_iPrepareTimerID);
     }
 }
@@ -210,6 +219,7 @@ void Proposer :: ExitAccept()
     {
         m_bIsAccepting = false;
         
+        // 移除接受阶段设置的timer
         m_poIOLoop->RemoveTimer(m_iAcceptTimerID);
     }
 }
@@ -239,9 +249,11 @@ void Proposer :: AddPrepareTimer(const int iTimeoutMs)
 
     PLGHead("timeoutms %d", m_iLastPrepareTimeoutMs);
 
+    // 每一次将超时时间翻倍
     m_iLastPrepareTimeoutMs *= 2;
     if (m_iLastPrepareTimeoutMs > MAX_PREPARE_TIMEOUTMS)
     {
+        // 但是不能超过阈值
         m_iLastPrepareTimeoutMs = MAX_PREPARE_TIMEOUTMS;
     }
 }
@@ -287,6 +299,7 @@ void Proposer :: Prepare(const bool bNeedNewBallot)
     BP->GetProposerBP()->Prepare();
     m_oTimeStat.Point();
     
+    // 先清空一些状态
     ExitAccept();
     m_bIsPreparing = true;
     m_bCanSkipPrepare = false;
@@ -306,13 +319,16 @@ void Proposer :: Prepare(const bool bNeedNewBallot)
 
     m_oMsgCounter.StartNewRound();
 
+    // 添加准备阶段的定时器
     AddPrepareTimer();
 
     PLGHead("END OK");
 
+    // 将prepare消息广播出去
     BroadcastMessage(oPaxosMsg);
 }
 
+// 收到prepare消息时的处理
 void Proposer :: OnPrepareReply(const PaxosMsg & oPaxosMsg)
 {
     PLGHead("START Msg.ProposalID %lu State.ProposalID %lu Msg.from_nodeid %lu RejectByPromiseID %lu",
@@ -322,7 +338,8 @@ void Proposer :: OnPrepareReply(const PaxosMsg & oPaxosMsg)
     BP->GetProposerBP()->OnPrepareReply();
     
     if (!m_bIsPreparing)
-    {
+   {
+      // 没有在准备阶段
         BP->GetProposerBP()->OnPrepareReplyButNotPreparing();
         //PLGErr("Not preparing, skip this msg");
         return;
@@ -330,15 +347,18 @@ void Proposer :: OnPrepareReply(const PaxosMsg & oPaxosMsg)
 
     if (oPaxosMsg.proposalid() != m_oProposerState.GetProposalID())
     {
+      // 提交的ID不对
         BP->GetProposerBP()->OnPrepareReplyNotSameProposalIDMsg();
         //PLGErr("ProposalID not same, skip this msg");
         return;
     }
 
+    // 保存到计数器
     m_oMsgCounter.AddReceive(oPaxosMsg.nodeid());
 
     if (oPaxosMsg.rejectbypromiseid() == 0)
     {
+        // 没有被拒绝，保存下来ID和值
         BallotNumber oBallot(oPaxosMsg.preacceptid(), oPaxosMsg.preacceptnodeid());
         PLGDebug("[Promise] PreAcceptedID %lu PreAcceptedNodeID %lu ValueSize %zu", 
                 oPaxosMsg.preacceptid(), oPaxosMsg.preacceptnodeid(), oPaxosMsg.value().size());
@@ -347,6 +367,7 @@ void Proposer :: OnPrepareReply(const PaxosMsg & oPaxosMsg)
     }
     else
     {
+        // 拒绝了
         PLGDebug("[Reject] RejectByPromiseID %lu", oPaxosMsg.rejectbypromiseid());
         m_oMsgCounter.AddReject(oPaxosMsg.nodeid());
         m_bWasRejectBySomeone = true;
@@ -355,6 +376,7 @@ void Proposer :: OnPrepareReply(const PaxosMsg & oPaxosMsg)
 
     if (m_oMsgCounter.IsPassedOnThisRound())
     {
+        // 根据计数器查询这一轮通过
         int iUseTimeMs = m_oTimeStat.Point();
         BP->GetProposerBP()->PreparePass(iUseTimeMs);
         PLGImp("[Pass] start accept, usetime %dms", iUseTimeMs);
@@ -364,6 +386,7 @@ void Proposer :: OnPrepareReply(const PaxosMsg & oPaxosMsg)
     else if (m_oMsgCounter.IsRejectedOnThisRound()
             || m_oMsgCounter.IsAllReceiveOnThisRound())
     {
+        // 添加准备阶段的定时器
         BP->GetProposerBP()->PrepareNotPass();
         PLGImp("[Not Pass] wait 30ms and restart prepare");
         AddPrepareTimer(OtherUtils::FastRand() % 30 + 10);
@@ -380,6 +403,7 @@ void Proposer :: Accept()
     BP->GetProposerBP()->Accept();
     m_oTimeStat.Point();
     
+    // 退出准备状态
     ExitPrepare();
     m_bIsAccepting = true;
     
@@ -391,15 +415,19 @@ void Proposer :: Accept()
     oPaxosMsg.set_value(m_oProposerState.GetValue());
     oPaxosMsg.set_lastchecksum(GetLastChecksum());
 
+    // 清空计数器，开始新的一轮
     m_oMsgCounter.StartNewRound();
 
+    // 添加接受定时器
     AddAcceptTimer();
 
     PLGHead("END");
 
+    // 广播这个消息
     BroadcastMessage(oPaxosMsg, BroadcastMessage_Type_RunSelf_Final);
 }
 
+// 接收到accept消息时的处理
 void Proposer :: OnAcceptReply(const PaxosMsg & oPaxosMsg)
 {
     PLGHead("START Msg.ProposalID %lu State.ProposalID %lu Msg.from_nodeid %lu RejectByPromiseID %lu",
@@ -410,6 +438,7 @@ void Proposer :: OnAcceptReply(const PaxosMsg & oPaxosMsg)
 
     if (!m_bIsAccepting)
     {
+        // 没有在接受状态
         //PLGErr("Not proposing, skip this msg");
         BP->GetProposerBP()->OnAcceptReplyButNotAccepting();
         return;
@@ -417,15 +446,18 @@ void Proposer :: OnAcceptReply(const PaxosMsg & oPaxosMsg)
 
     if (oPaxosMsg.proposalid() != m_oProposerState.GetProposalID())
     {
+        // ID不对
         //PLGErr("ProposalID not same, skip this msg");
         BP->GetProposerBP()->OnAcceptReplyNotSameProposalIDMsg();
         return;
     }
 
+    // 计数器接收这个消息
     m_oMsgCounter.AddReceive(oPaxosMsg.nodeid());
 
     if (oPaxosMsg.rejectbypromiseid() == 0)
     {
+        // 没有被拒绝
         PLGDebug("[Accept]");
         m_oMsgCounter.AddPromiseOrAccept(oPaxosMsg.nodeid());
     }
@@ -458,6 +490,7 @@ void Proposer :: OnAcceptReply(const PaxosMsg & oPaxosMsg)
     PLGHead("END");
 }
 
+// prepare超时
 void Proposer :: OnPrepareTimeout()
 {
     PLGHead("OK");
@@ -471,9 +504,11 @@ void Proposer :: OnPrepareTimeout()
 
     BP->GetProposerBP()->PrepareTimeout();
     
+    // 重新发起prepare
     Prepare(m_bWasRejectBySomeone);
 }
 
+// accept超时
 void Proposer :: OnAcceptTimeout()
 {
     PLGHead("OK");
@@ -487,6 +522,7 @@ void Proposer :: OnAcceptTimeout()
     
     BP->GetProposerBP()->AcceptTimeout();
     
+    // 重新发起prepare
     Prepare(m_bWasRejectBySomeone);
 }
 
