@@ -48,6 +48,7 @@ int Committer :: NewValueGetID(const std::string & sValue, uint64_t & llInstance
     return NewValueGetID(sValue, llInstanceID, nullptr);
 }
 
+// 提交一个值
 int Committer :: NewValueGetID(const std::string & sValue, uint64_t & llInstanceID, SMCtx * poSMCtx)
 {
     BP->GetCommiterBP()->NewValue();

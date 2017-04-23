@@ -216,7 +216,7 @@ Replayer * Instance :: GetCheckpointReplayer()
 }
 
 ////////////////////////////////////////////////
-
+// 检查是否有新的提交，如果有就调用proposer进行提交
 void Instance :: CheckNewValue()
 {
     if (!m_oCommitCtx.IsNewCommit())
@@ -229,6 +229,7 @@ void Instance :: CheckNewValue()
         return;
     }
 
+    // follower不进行提交
     if (m_poConfig->IsIMFollower())
     {
         PLGErr("I'm follower, skip this new value");
@@ -236,6 +237,7 @@ void Instance :: CheckNewValue()
         return;
     }
 
+    // 检查配置失败
     if (!m_poConfig->CheckConfig())
     {
         PLGErr("I'm not in membership, skip this new value");
@@ -243,6 +245,7 @@ void Instance :: CheckNewValue()
         return;
     }
 
+    // 待提交的数据太大
     if ((int)m_oCommitCtx.GetCommitValue().size() > MAX_VALUE_SIZE)
     {
         PLGErr("value size %zu to large, skip this new value",
@@ -281,6 +284,7 @@ void Instance :: CheckNewValue()
     }
 }
 
+// 提交超时
 void Instance :: OnNewValueCommitTimeout()
 {
     BP->GetInstanceBP()->OnNewValueCommitTimeout();
@@ -300,6 +304,7 @@ int Instance :: OnReceiveMessage(const char * pcMessage, const int iMessageLen)
     return 0;
 }
 
+// 对消息头部的检查
 bool Instance :: ReceiveMsgHeaderCheck(const Header & oHeader, const nodeid_t iFromNodeID)
 {
     if (m_poConfig->GetGid() == 0 || oHeader.gid() == 0)
@@ -307,6 +312,7 @@ bool Instance :: ReceiveMsgHeaderCheck(const Header & oHeader, const nodeid_t iF
         return true;
     }
 
+    // gid不一致
     if (m_poConfig->GetGid() != oHeader.gid())
     {
         BP->GetAlgorithmBaseBP()->HeaderGidNotSame();
@@ -318,6 +324,7 @@ bool Instance :: ReceiveMsgHeaderCheck(const Header & oHeader, const nodeid_t iF
     return true;
 }
 
+// 收到消息
 void Instance :: OnReceive(const std::string & sBuffer)
 {
     BP->GetInstanceBP()->OnReceive();
@@ -341,12 +348,14 @@ void Instance :: OnReceive(const std::string & sBuffer)
 
     if (iCmd == MsgCmd_PaxosMsg)
     {
+        // paxos类型的消息
         if (m_oCheckpointMgr.InAskforcheckpointMode())
         {
             PLGImp("in ask for checkpoint mode, ignord paxosmsg");
             return;
         }
-        
+
+        // decode PaxosMsg出来
         PaxosMsg oPaxosMsg;
         bool bSucc = oPaxosMsg.ParseFromArray(sBuffer.data() + iBodyStartPos, iBodyLen);
         if (!bSucc)
@@ -356,11 +365,13 @@ void Instance :: OnReceive(const std::string & sBuffer)
             return;
         }
 
+        // 检查消息头
         if (!ReceiveMsgHeaderCheck(oHeader, oPaxosMsg.nodeid()))
         {
             return;
         }
-        
+
+        // 处理消息
         OnReceivePaxosMsg(oPaxosMsg);
     }
     else if (iCmd == MsgCmd_CheckpointMsg)
@@ -415,9 +426,9 @@ int Instance :: OnReceivePaxosMsg(const PaxosMsg & oPaxosMsg, const bool bIsRetr
             m_oProposer.GetInstanceID(), oPaxosMsg.instanceid(), oPaxosMsg.msgtype(),
             oPaxosMsg.nodeid(), m_poConfig->GetMyNodeID(), m_oLearner.GetSeenLatestInstanceID());
 
-    if (oPaxosMsg.msgtype() == MsgType_PaxosPrepareReply
-            || oPaxosMsg.msgtype() == MsgType_PaxosAcceptReply
-            || oPaxosMsg.msgtype() == MsgType_PaxosProposal_SendNewValue)
+    if (oPaxosMsg.msgtype() == MsgType_PaxosPrepareReply      // prepare消息的回复
+            || oPaxosMsg.msgtype() == MsgType_PaxosAcceptReply  // accept消息的回复
+            || oPaxosMsg.msgtype() == MsgType_PaxosProposal_SendNewValue) // 没有看到有使用这个类型的地方
     {
         if (!m_poConfig->IsValidNodeID(oPaxosMsg.nodeid()))
         {
@@ -426,10 +437,11 @@ int Instance :: OnReceivePaxosMsg(const PaxosMsg & oPaxosMsg, const bool bIsRetr
             return 0;
         }
         
+        // 进入proposer中处理消息
         return ReceiveMsgForProposer(oPaxosMsg);
     }
-    else if (oPaxosMsg.msgtype() == MsgType_PaxosPrepare
-            || oPaxosMsg.msgtype() == MsgType_PaxosAccept)
+    else if (oPaxosMsg.msgtype() == MsgType_PaxosPrepare  // prepare消息
+            || oPaxosMsg.msgtype() == MsgType_PaxosAccept)  // accept消息
     {
         //if my gid is zero, then this is a unknown node.
         if (m_poConfig->GetGid() == 0)
@@ -449,6 +461,7 @@ int Instance :: OnReceivePaxosMsg(const PaxosMsg & oPaxosMsg, const bool bIsRetr
         }
 
         ChecksumLogic(oPaxosMsg);
+        // 进入acceptor中处理消息
         return ReceiveMsgForAcceptor(oPaxosMsg, bIsRetry);
     }
     else if (oPaxosMsg.msgtype() == MsgType_PaxosLearner_AskforLearn
@@ -460,6 +473,7 @@ int Instance :: OnReceivePaxosMsg(const PaxosMsg & oPaxosMsg, const bool bIsRetr
             || oPaxosMsg.msgtype() == MsgType_PaxosLearner_AskforCheckpoint)
     {
         ChecksumLogic(oPaxosMsg);
+        // 进入learn中处理消息
         return ReceiveMsgForLearner(oPaxosMsg);
     }
     else
@@ -471,8 +485,10 @@ int Instance :: OnReceivePaxosMsg(const PaxosMsg & oPaxosMsg, const bool bIsRetr
     return 0;
 }
 
+// propose处理消息的逻辑
 int Instance :: ReceiveMsgForProposer(const PaxosMsg & oPaxosMsg)
 {
+    // follower忽略这个消息
     if (m_poConfig->IsIMFollower())
     {
         PLGErr("I'm follower, skip this message");
@@ -480,7 +496,7 @@ int Instance :: ReceiveMsgForProposer(const PaxosMsg & oPaxosMsg)
     }
 
     ///////////////////////////////////////////////////////////////
-    
+    // 实例ID对不上    
     if (oPaxosMsg.instanceid() != m_oProposer.GetInstanceID())
     {
         BP->GetInstanceBP()->OnReceivePaxosProposerMsgInotsame();
@@ -490,10 +506,12 @@ int Instance :: ReceiveMsgForProposer(const PaxosMsg & oPaxosMsg)
 
     if (oPaxosMsg.msgtype() == MsgType_PaxosPrepareReply)
     {
+        // prepare消息的处理
         m_oProposer.OnPrepareReply(oPaxosMsg);
     }
     else if (oPaxosMsg.msgtype() == MsgType_PaxosAcceptReply)
     {
+        // accept消息的处理
         m_oProposer.OnAcceptReply(oPaxosMsg);
     }
 
@@ -502,6 +520,7 @@ int Instance :: ReceiveMsgForProposer(const PaxosMsg & oPaxosMsg)
 
 int Instance :: ReceiveMsgForAcceptor(const PaxosMsg & oPaxosMsg, const bool bIsRetry)
 {
+    // follower忽略
     if (m_poConfig->IsIMFollower())
     {
         PLGErr("I'm follower, skip this message");
@@ -509,12 +528,15 @@ int Instance :: ReceiveMsgForAcceptor(const PaxosMsg & oPaxosMsg, const bool bIs
     }
     
     //////////////////////////////////////////////////////////////
-    
+
+    // 实例ID不同
     if (oPaxosMsg.instanceid() != m_oAcceptor.GetInstanceID())
     {
         BP->GetInstanceBP()->OnReceivePaxosAcceptorMsgInotsame();
     }
-    
+
+    // 消息的实例ID正好是当前acceptor的实例ID+1
+    // 表示这个消息已经被投票通过了
     if (oPaxosMsg.instanceid() == m_oAcceptor.GetInstanceID() + 1)
     {
         //skip success message
@@ -525,17 +547,23 @@ int Instance :: ReceiveMsgForAcceptor(const PaxosMsg & oPaxosMsg, const bool bIs
         ReceiveMsgForLearner(oNewPaxosMsg);
     }
             
+    // 消息的实例ID正好是当前acceptor的实例ID
+    // 表示是正在进行投票的消息
     if (oPaxosMsg.instanceid() == m_oAcceptor.GetInstanceID())
     {
         if (oPaxosMsg.msgtype() == MsgType_PaxosPrepare)
         {
+            // 处理prepare消息
             return m_oAcceptor.OnPrepare(oPaxosMsg);
         }
         else if (oPaxosMsg.msgtype() == MsgType_PaxosAccept)
         {
+            // 处理accept消息
             m_oAcceptor.OnAccept(oPaxosMsg);
         }
     }
+    // 在不是retry消息，同时消息实例ID大于当前acceptor实例ID的情况下
+    // 因为retry的消息不再进行处理了
     else if ((!bIsRetry) && (oPaxosMsg.instanceid() > m_oAcceptor.GetInstanceID()))
     {
         //retry msg can't retry again.
@@ -543,6 +571,7 @@ int Instance :: ReceiveMsgForAcceptor(const PaxosMsg & oPaxosMsg, const bool bIs
         {
             if (oPaxosMsg.instanceid() < m_oAcceptor.GetInstanceID() + RETRY_QUEUE_MAX_LEN)
             {
+                // 距离当前acceptor消息还不是很远的情况下
                 //need retry msg precondition
                 //1. prepare or accept msg
                 //2. msg.instanceid > nowinstanceid. 
@@ -558,6 +587,7 @@ int Instance :: ReceiveMsgForAcceptor(const PaxosMsg & oPaxosMsg, const bool bIs
             }
             else
             {
+                // 无效的retry消息，清空
                 //retry msg not series, no use.
                 m_oIOLoop.ClearRetryQueue();
             }
@@ -567,6 +597,7 @@ int Instance :: ReceiveMsgForAcceptor(const PaxosMsg & oPaxosMsg, const bool bIs
     return 0;
 }
 
+// 处理从learn处接受的消息
 int Instance :: ReceiveMsgForLearner(const PaxosMsg & oPaxosMsg)
 {
     if (oPaxosMsg.msgtype() == MsgType_PaxosLearner_AskforLearn)

@@ -76,6 +76,7 @@ const bool Cleaner :: IsPaused() const
     return m_bIsPaused;
 }
 
+// cleaner主循环
 void Cleaner :: run()
 {
     m_bIsStart = true;
@@ -147,9 +148,12 @@ void Cleaner :: run()
     }
 }
 
+// 对最小选择的实例ID进行修正
 int Cleaner :: FixMinChosenInstanceID(const uint64_t llOldMinChosenInstanceID)
 {
+    // 先从SMFac从拿到本组的ck实例ID
     uint64_t llCPInstanceID = m_poSMFac->GetCheckpointInstanceID(m_poConfig->GetMyGroupIdx()) + 1;
+    // 从传入的实例ID开始计算
     uint64_t llFixMinChosenInstanceID = llOldMinChosenInstanceID;
     int ret = 0;
 
@@ -177,6 +181,7 @@ int Cleaner :: FixMinChosenInstanceID(const uint64_t llOldMinChosenInstanceID)
         }
     }
     
+    // 如果比原来的大，重新进行修正
     if (llFixMinChosenInstanceID > llOldMinChosenInstanceID)
     {
         ret = m_poCheckpointMgr->SetMinChosenInstanceID(llFixMinChosenInstanceID);
@@ -196,6 +201,7 @@ bool Cleaner :: DeleteOne(const uint64_t llInstanceID)
     WriteOptions oWriteOptions;
     oWriteOptions.bSync = false;
 
+    // 删除实例
     int ret = m_poLogStorage->Del(oWriteOptions, m_poConfig->GetMyGroupIdx(), llInstanceID);
     if (ret != 0)
     {

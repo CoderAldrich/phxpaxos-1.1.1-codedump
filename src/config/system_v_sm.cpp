@@ -43,12 +43,14 @@ SystemVSM :: ~SystemVSM()
 
 int SystemVSM :: Init()
 {
+    // 尝试从存储中读取数据
     int ret = m_oSystemVStore.Read(m_iMyGroupIdx, m_oSystemVariables);
     if (ret != 0 && ret != 1)
     {
         return ret;
     }
 
+    // 没有读取到
     if (ret == 1)
     {
         m_oSystemVariables.set_gid(0);
@@ -294,6 +296,7 @@ int SystemVSM :: GetCheckpointBuffer(std::string & sCPBuffer)
     return 0;
 }
 
+// 使用CP传入的数据进行更新，但是要检查版本号和gid等
 int SystemVSM :: UpdateByCheckpoint(const std::string & sCPBuffer, bool & bChange)
 {
     if (sCPBuffer.size() == 0)
@@ -311,12 +314,14 @@ int SystemVSM :: UpdateByCheckpoint(const std::string & sCPBuffer, bool & bChang
         return -1;
     }
 
+    // 检查版本号
     if (oVariables.version() == (uint64_t)-1)
     {
         PLG1Err("variables.version not init, this is not checkpoint");
         return -2;
     }
 
+    // 检查gid是否一样
     if (m_oSystemVariables.gid() != 0 
             && oVariables.gid() != m_oSystemVariables.gid())
     {
@@ -324,6 +329,7 @@ int SystemVSM :: UpdateByCheckpoint(const std::string & sCPBuffer, bool & bChang
         return -2;
     }
 
+    // 检查版本号，不能出现现有版本号大于当前传入数据版本号的情况
     if (m_oSystemVariables.version() != (uint64_t)-1 
             && oVariables.version() <= m_oSystemVariables.version())
     {
@@ -332,6 +338,7 @@ int SystemVSM :: UpdateByCheckpoint(const std::string & sCPBuffer, bool & bChang
         return 0;
     }
 
+    // 到了这里可以保存数据了
     bChange = true;
     SystemVariables oOldVariables = m_oSystemVariables;
 

@@ -83,6 +83,7 @@ int MasterStateMachine :: Init()
     return 0;
 }
 
+// 序列化数据写入存储中
 int MasterStateMachine :: UpdateMasterToStore(const nodeid_t llMasterNodeID, const uint64_t llVersion, const uint32_t iLeaseTime)
 {
     MasterVariables oVariables;
@@ -203,6 +204,7 @@ bool MasterStateMachine :: Execute(const int iGroupIdx, const uint64_t llInstanc
 
     if (oMasterOper.operator_() == MasterOperatorType_Complete)
     {
+        // 目前只有这种类型，表示选举master结束了
         uint64_t * pAbsMasterTimeout = nullptr;
         if (poSMCtx != nullptr && poSMCtx->m_pCtx != nullptr)
         {
@@ -213,6 +215,7 @@ bool MasterStateMachine :: Execute(const int iGroupIdx, const uint64_t llInstanc
 
         PLG1Imp("absmaster timeout %lu", llAbsMasterTimeout);
 
+        // 学习这个新的master信息
         int ret = LearnMaster(llInstanceID, oMasterOper, llAbsMasterTimeout);
         if (ret != 0)
         {
@@ -257,6 +260,7 @@ int MasterStateMachine :: GetCheckpointBuffer(std::string & sCPBuffer)
         return 0;
     }
     
+    // 将当前数据序列化到字符串中返回
     MasterVariables oVariables;
     oVariables.set_masternodeid(m_iMasterNodeID);
     oVariables.set_version(m_llMasterVersion);
@@ -279,6 +283,7 @@ int MasterStateMachine :: UpdateByCheckpoint(const std::string & sCPBuffer, bool
         return 0;
     }
 
+    // 先从字符串中反序列化数据出来
     MasterVariables oVariables;
     bool bSucc = oVariables.ParseFromArray(sCPBuffer.data(), sCPBuffer.size());
     if (!bSucc)
@@ -287,6 +292,7 @@ int MasterStateMachine :: UpdateByCheckpoint(const std::string & sCPBuffer, bool
         return -1;
     }
 
+    // 检查一下版本号，小于当前版本号的忽略
     if (oVariables.version() <= m_llMasterVersion
             && m_llMasterVersion != (uint64_t)-1)
     {
@@ -295,7 +301,7 @@ int MasterStateMachine :: UpdateByCheckpoint(const std::string & sCPBuffer, bool
         return 0;
     }
 
-
+    // OK,以反序列化出来的结果更新master信息存储
     int ret = UpdateMasterToStore(oVariables.masternodeid(), oVariables.version(), oVariables.leasetime());
     if (ret != 0)
     {

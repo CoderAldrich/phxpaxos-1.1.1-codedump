@@ -187,7 +187,7 @@ int Proposer :: NewValue(const std::string & sValue)
 
     if (m_bCanSkipPrepare && !m_bWasRejectBySomeone)
     {
-        // 在可以忽略的情况下才能直接接受
+        // 在可以忽略而且没有被任何一个acceptor拒绝的情况下才能直接接受
         BP->GetProposerBP()->NewProposalSkipPrepare();
 
         PLGHead("skip prepare, directly start accept");
@@ -473,10 +473,12 @@ void Proposer :: OnAcceptReply(const PaxosMsg & oPaxosMsg)
 
     if (m_oMsgCounter.IsPassedOnThisRound())
     {
+        // 提议通过了
         int iUseTimeMs = m_oTimeStat.Point();
         BP->GetProposerBP()->AcceptPass(iUseTimeMs);
         PLGImp("[Pass] Start send learn, usetime %dms", iUseTimeMs);
         ExitAccept();
+        // 通过learn学习新提交成功的值
         m_poLearner->ProposerSendSuccess(GetInstanceID(), m_oProposerState.GetProposalID());
     }
     else if (m_oMsgCounter.IsRejectedOnThisRound()

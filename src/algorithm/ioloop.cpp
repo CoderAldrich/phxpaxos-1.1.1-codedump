@@ -211,6 +211,7 @@ void IOLoop :: OneLoop(const int iTimeoutMs)
         if (psMessage != nullptr && psMessage->size() > 0)
         {
             m_iQueueMemSize -= psMessage->size();
+            // 处理消息
             m_poInstance->OnReceive(*psMessage);
         }
 

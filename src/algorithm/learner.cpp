@@ -572,16 +572,19 @@ void Learner :: ProposerSendSuccess(
 
     PaxosMsg oPaxosMsg;
     
+    // 向其他参与者广播新学习到的值
     oPaxosMsg.set_msgtype(MsgType_PaxosLearner_ProposerSendSuccess);
     oPaxosMsg.set_instanceid(llLearnInstanceID);
     oPaxosMsg.set_nodeid(m_poConfig->GetMyNodeID());
     oPaxosMsg.set_proposalid(llProposalID);
     oPaxosMsg.set_lastchecksum(GetLastChecksum());
 
+    // BroadcastMessage_Type_RunSelf_First：这个标志位表示这个消息首先由本实例的learn处理，然后再广播出去
     //run self first
     BroadcastMessage(oPaxosMsg, BroadcastMessage_Type_RunSelf_First);
 }
 
+// 收到MsgType_PaxosLearner_ProposerSendSuccess消息的处理
 void Learner :: OnProposerSendSuccess(const PaxosMsg & oPaxosMsg)
 {
     BP->GetLearnerBP()->OnProposerSendSuccess();

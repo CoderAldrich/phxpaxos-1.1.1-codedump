@@ -240,6 +240,8 @@ int Base :: BroadcastMessage(const PaxosMsg & oPaxosMsg, const int iRunType, con
 
     BP->GetInstanceBP()->BroadcastMessage();
 
+    // BroadcastMessage_Type_RunSelf_First表示是自己先处理消息
+    // 所以先调用自己实例的回调函数
     if (iRunType == BroadcastMessage_Type_RunSelf_First)
     {
         if (m_poInstance->OnReceivePaxosMsg(oPaxosMsg) != 0)
@@ -257,6 +259,8 @@ int Base :: BroadcastMessage(const PaxosMsg & oPaxosMsg, const int iRunType, con
 
     ret = m_poMsgTransport->BroadcastMessage(sBuffer, iSendType);
 
+    // BroadcastMessage_Type_RunSelf_Final表示是自己最后处理消息
+    // 所以最后调用自己实例的回调函数
     if (iRunType == BroadcastMessage_Type_RunSelf_Final)
     {
         m_poInstance->OnReceivePaxosMsg(oPaxosMsg);

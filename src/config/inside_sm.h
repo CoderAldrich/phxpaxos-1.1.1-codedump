@@ -32,8 +32,10 @@ class InsideSM : public StateMachine
 public:
     virtual ~InsideSM() {}
 
+    // 返回CP buffer
     virtual int GetCheckpointBuffer(std::string & sCPBuffer) = 0;
 
+    // 使用CP buffser数据更新
     virtual int UpdateByCheckpoint(const std::string & sCPBuffer, bool & bChange) = 0;
 };
     

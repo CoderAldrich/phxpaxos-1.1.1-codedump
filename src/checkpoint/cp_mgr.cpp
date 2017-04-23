@@ -95,26 +95,31 @@ Cleaner * CheckpointMgr :: GetCleaner()
     return &m_oCleaner;
 }
 
+// 准备工作
 int CheckpointMgr :: PrepareForAskforCheckpoint(const nodeid_t iSendNodeID)
 {
+    // 插入MAP
     if (m_setNeedAsk.find(iSendNodeID) == m_setNeedAsk.end())
     {
         m_setNeedAsk.insert(iSendNodeID);
     }
 
+    // 保存时间
     if (m_llLastAskforCheckpointTime == 0)
     {
         m_llLastAskforCheckpointTime = Time::GetSteadyClockMS();
     }
 
+    // 当前时间
     uint64_t llNowTime = Time::GetSteadyClockMS();
     if (llNowTime > m_llLastAskforCheckpointTime + 60000)
     {
+        // 大于阈值了
         PLGImp("no majority reply, just ask for checkpoint");
     }
     else
     {
-
+        // 小于半数
         if ((int)m_setNeedAsk.size() < m_poConfig->GetMajorityCount())
         {
             PLGImp("Need more other tell us need to askforcheckpoint");
@@ -150,6 +155,7 @@ const uint64_t CheckpointMgr :: GetMinChosenInstanceID() const
     return m_llMinChosenInstanceID;
 }
 
+// 保存最小被选中的实例ID
 int CheckpointMgr :: SetMinChosenInstanceID(const uint64_t llMinChosenInstanceID)
 { 
     WriteOptions oWriteOptions;

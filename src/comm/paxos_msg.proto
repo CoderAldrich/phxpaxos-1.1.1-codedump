@@ -68,11 +68,12 @@ message SystemVariables
 };
 
 // src/master/master_variables_store.cpp负责写这个数据到log中
+// 用于保存当前master信息
 message MasterVariables
 {
-	required uint64 MasterNodeid = 1;
-	required uint64 Version = 2;
-	required uint32 LeaseTime = 3;
+	required uint64 MasterNodeid = 1; // master节点ID
+	required uint64 Version = 2;      // 版本号
+	required uint32 LeaseTime = 3;    // 租期
 };
 
 message PaxosValue
