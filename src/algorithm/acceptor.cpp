@@ -135,6 +135,7 @@ int AcceptorState :: Persist(const uint64_t llInstanceID, const uint32_t iLastCh
 // 加载数据，把实例id返回
 int AcceptorState :: Load(uint64_t & llInstanceID)
 {
+    // 从之前的日志数据中加载最大实例ID
     int ret = m_oPaxosLog.GetMaxInstanceIDFromLog(m_poConfig->GetMyGroupIdx(), llInstanceID);
     if (ret != 0 && ret != 1)
     {

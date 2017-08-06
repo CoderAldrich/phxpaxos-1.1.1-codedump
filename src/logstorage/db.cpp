@@ -192,8 +192,10 @@ const std::string Database :: GetDBPath()
     return m_sDBPath;
 }
 
+// 拿到最大实例ID以及它对应的文件ID返回
 int Database :: GetMaxInstanceIDFileID(std::string & sFileID, uint64_t & llInstanceID)
 {
+    // 首先拿到最大实例ID
     uint64_t llMaxInstanceID = 0;
     int ret = GetMaxInstanceID(llMaxInstanceID);
     if (ret != 0 && ret != 1)
@@ -207,8 +209,10 @@ int Database :: GetMaxInstanceIDFileID(std::string & sFileID, uint64_t & llInsta
         return 0;
     }
 
+    // 根据实例ID生成KEY
     string sKey = GenKey(llMaxInstanceID);
     
+    // 根据key查询文件ID
     leveldb::Status oStatus = m_poLevelDB->Get(leveldb::ReadOptions(), sKey, &sFileID);
     if (!oStatus.ok())
     {
@@ -229,6 +233,7 @@ int Database :: GetMaxInstanceIDFileID(std::string & sFileID, uint64_t & llInsta
     return 0;
 }
 
+// 将实例的文件ID存入数据库
 int Database :: RebuildOneIndex(const uint64_t llInstanceID, const std::string & sFileID)
 {
     string sKey = GenKey(llInstanceID);
@@ -460,14 +465,17 @@ int Database :: Del(const WriteOptions & oWriteOptions, const uint64_t llInstanc
     return 0;
 }
 
+// 得到最大实例ID
 int Database :: GetMaxInstanceID(uint64_t & llInstanceID)
 {
     llInstanceID = MINCHOSEN_KEY;
 
     leveldb::Iterator * it = m_poLevelDB->NewIterator(leveldb::ReadOptions());
     
+    // 迭代器移动到最后
     it->SeekToLast();
 
+    // 往前查找
     while (it->Valid())
     {
         llInstanceID = GetInstanceIDFromKey(it->key().ToString());
@@ -475,6 +483,7 @@ int Database :: GetMaxInstanceID(uint64_t & llInstanceID)
                 || llInstanceID == SYSTEMVARIABLES_KEY
                 || llInstanceID == MASTERVARIABLES_KEY)
         {
+            // 这些条件下才要继续往前查找
             it->Prev();
         }
         else
@@ -576,6 +585,7 @@ int Database :: SetMinChosenInstanceID(const WriteOptions & oWriteOptions, const
 }
 
 
+// 注意这里options没有起作用，必须sync
 int Database :: SetSystemVariables(const WriteOptions & oWriteOptions, const std::string & sBuffer)
 {
     static uint64_t llSystemVariablesKey = SYSTEMVARIABLES_KEY;
@@ -588,6 +598,7 @@ int Database :: GetSystemVariables(std::string & sBuffer)
     return GetFromLevelDB(llSystemVariablesKey, sBuffer);
 }
 
+// 注意这里options没有起作用，必须sync
 int Database :: SetMasterVariables(const WriteOptions & oWriteOptions, const std::string & sBuffer)
 {
     static uint64_t llMasterVariablesKey = MASTERVARIABLES_KEY;

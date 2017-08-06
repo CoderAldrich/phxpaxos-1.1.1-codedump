@@ -140,7 +140,7 @@ int Committer :: NewValueGetIDNoRetry(const std::string & sValue, uint64_t & llI
     m_poSMFac->PackPaxosValue(sPackSMIDValue, iSMID);
 
     m_poCommitCtx->NewCommit(&sPackSMIDValue, poSMCtx, iLeftTimeoutMs);
-    // 这里怎么理解
+    // 通知IO线程有新的commit
     m_poIOLoop->AddNotify();
 
     int ret = m_poCommitCtx->GetResult(llInstanceID);

@@ -72,6 +72,7 @@ int LogStore :: Init(const std::string & sPath, const int iMyGroupIdx, Database 
 
     m_oFileLogger.Init(m_sPath);
 
+    // 初始化meta文件
     string sMetaFilePath = m_sPath + "/meta";
     
     m_iMetaFd = open(sMetaFilePath.c_str(), O_CREAT | O_RDWR, S_IREAD | S_IWRITE);
@@ -81,12 +82,14 @@ int LogStore :: Init(const std::string & sPath, const int iMyGroupIdx, Database 
         return -1;
     }
 
+    // 回到文件开始处
     off_t iSeekPos = lseek(m_iMetaFd, 0, SEEK_SET);
     if (iSeekPos == -1)
     {
         return -1;
     }
 
+    // 读出文件ID
     ssize_t iReadLen = read(m_iMetaFd, &m_iFileID, sizeof(int));
     if (iReadLen != (ssize_t)sizeof(int))
     {
@@ -101,6 +104,7 @@ int LogStore :: Init(const std::string & sPath, const int iMyGroupIdx, Database 
         }
     }
 
+    // 紧跟着读出checksum并进行校验
     uint32_t iMetaChecksum = 0;
     iReadLen = read(m_iMetaFd, &iMetaChecksum, sizeof(uint32_t));
     if (iReadLen == (ssize_t)sizeof(uint32_t))
@@ -114,6 +118,7 @@ int LogStore :: Init(const std::string & sPath, const int iMyGroupIdx, Database 
         }
     }
 
+    // 重建索引
     int ret = RebuildIndex(poDatabase, m_iNowFileOffset);
     if (ret != 0)
     {
@@ -149,8 +154,10 @@ int LogStore :: Init(const std::string & sPath, const int iMyGroupIdx, Database 
     return 0;
 }
 
+// 扩展文件大小
 int LogStore :: ExpandFile(int iFd, int & iFileSize)
 {
+    // 先读出文件的大小
     iFileSize = lseek(iFd, 0, SEEK_END);
     if (iFileSize == -1)
     {
@@ -158,15 +165,18 @@ int LogStore :: ExpandFile(int iFd, int & iFileSize)
         return -1;
     }
 
+    // 为0表示是新文件
     if (iFileSize == 0)
     {
         //new file
+        // 预先seek一个长度
         iFileSize = lseek(iFd, LOG_FILE_MAX_SIZE - 1, SEEK_SET);
         if (iFileSize != LOG_FILE_MAX_SIZE - 1)
         {
             return -1;
         }
 
+        // 全部填充为0
         ssize_t iWriteLen = write(iFd, "\0", 1);
         if (iWriteLen != 1)
         {
@@ -186,6 +196,7 @@ int LogStore :: ExpandFile(int iFd, int & iFileSize)
     return 0;
 }
 
+// 增加文件ID，并且更新写到meta文件里
 int LogStore :: IncreaseFileID()
 {
     int iFileID = m_iFileID + 1;
@@ -197,6 +208,7 @@ int LogStore :: IncreaseFileID()
         return -1;
     }
 
+    // 依次写入新的文件ID以及checksum
     size_t iWriteLen = write(m_iMetaFd, (char *)&iFileID, sizeof(int));
     if (iWriteLen != sizeof(int))
     {
@@ -241,8 +253,10 @@ int LogStore :: DeleteFile(const int iFileID)
 {
     if (m_iDeletedMaxFileID == -1)
     {
+        // 如果之前没有任何删除文件的操作
         if (iFileID - 2000 > 0)
         {
+            // 那么从前面的2000个文件开始进行删除
             m_iDeletedMaxFileID = iFileID - 2000;
         }
     }
@@ -293,11 +307,13 @@ int LogStore :: GetFileFD(const int iNeedWriteSize, int & iFd, int & iFileID, in
     iOffset = lseek(m_iFd, m_iNowFileOffset, SEEK_SET);
     assert(iOffset != -1);
 
+    // 当前文件不够了
     if (iOffset + iNeedWriteSize > m_iNowFileSize)
     {
         close(m_iFd);
         m_iFd = -1;
 
+        // 新增一个文件ID，同时新建一个文件
         int ret = IncreaseFileID();
         if (ret != 0)
         {
@@ -312,6 +328,7 @@ int LogStore :: GetFileFD(const int iNeedWriteSize, int & iFd, int & iFileID, in
             return ret;
         }
 
+        // 保证这个新文件是空文件
         iOffset = lseek(m_iFd, 0, SEEK_END);
         if (iOffset != 0)
         {
@@ -325,6 +342,7 @@ int LogStore :: GetFileFD(const int iNeedWriteSize, int & iFd, int & iFileID, in
             return -1;
         }
 
+        // 然后再去扩展这个文件到预定的大小
         ret = ExpandFile(m_iFd, m_iNowFileSize);
         if (ret != 0)
         {
@@ -513,6 +531,7 @@ int LogStore :: ForceDel(const std::string & sFileID, const uint64_t llInstanceI
 }
 
 
+// 生成文件ID
 void LogStore :: GenFileID(const int iFileID, const int iOffset, const uint32_t iCheckSum, std::string & sFileID)
 {
     char sTmp[sizeof(int) + sizeof(int) + sizeof(uint32_t)] = {0};
@@ -523,8 +542,11 @@ void LogStore :: GenFileID(const int iFileID, const int iOffset, const uint32_t 
     sFileID = std::string(sTmp, sizeof(int) + sizeof(int) + sizeof(uint32_t));
 }
 
+// 分析文件，是前面GenFileID的反操作
 void LogStore :: ParseFileID(const std::string & sFileID, int & iFileID, int & iOffset, uint32_t & iCheckSum)
 {
+    // 文件格式是：
+    // 文件ID(INT) + 偏移量(int) + 校验码(uint32)
     memcpy(&iFileID, (void *)sFileID.c_str(), sizeof(int));
     memcpy(&iOffset, (void *)(sFileID.c_str() + sizeof(int)), sizeof(int));
     memcpy(&iCheckSum, (void *)(sFileID.c_str() + sizeof(int) + sizeof(int)), sizeof(uint32_t));
@@ -543,12 +565,13 @@ const bool LogStore :: IsValidFileID(const std::string & sFileID)
 }
 
 //////////////////////////////////////////////////////////////////
-
+// 重建索引
 int LogStore :: RebuildIndex(Database * poDatabase, int & iNowFileWriteOffset)
 {
     string sLastFileID;
 
     uint64_t llNowInstanceID = 0;
+    // 先拿到最大实例ID以及最后一个文件ID
     int ret = poDatabase->GetMaxInstanceIDFileID(sLastFileID, llNowInstanceID);
     if (ret != 0)
     {
@@ -559,6 +582,7 @@ int LogStore :: RebuildIndex(Database * poDatabase, int & iNowFileWriteOffset)
     int iOffset = 0;
     uint32_t iCheckSum = 0;
 
+    // 从leveldb的数据中decode出来文件的信息
     if (sLastFileID.size() > 0)
     {
         ParseFileID(sLastFileID, iFileID, iOffset, iCheckSum);
@@ -573,6 +597,7 @@ int LogStore :: RebuildIndex(Database * poDatabase, int & iNowFileWriteOffset)
 
     PLG1Head("START fileid %d offset %d checksum %u", iFileID, iOffset, iCheckSum);
 
+    // 遍历文件重建索引
     for (int iNowFileID = iFileID; ;iNowFileID++)
     {
         ret = RebuildIndexForOneFile(iNowFileID, iOffset, poDatabase, iNowFileWriteOffset, llNowInstanceID);
@@ -599,6 +624,8 @@ int LogStore :: RebuildIndex(Database * poDatabase, int & iNowFileWriteOffset)
     return ret;
 }
 
+// 重建一个文件的索引
+// 返回：当前文件的写偏移量(iNowFileWriteOffset)，现在的实例ID(llNowInstanceID)
 int LogStore :: RebuildIndexForOneFile(const int iFileID, const int iOffset, 
         Database * poDatabase, int & iNowFileWriteOffset, uint64_t & llNowInstanceID)
 {
@@ -619,13 +646,15 @@ int LogStore :: RebuildIndexForOneFile(const int iFileID, const int iOffset,
         return ret;
     }
 
+    // 文件长度
     int iFileLen = lseek(iFd, 0, SEEK_END);
     if (iFileLen == -1)
     {
         close(iFd);
         return -1;
     }
-    
+
+    // 根据传入的偏移量移动到指定位置
     off_t iSeekPos = lseek(iFd, iOffset, SEEK_SET);
     if (iSeekPos == -1)
     {
@@ -633,12 +662,14 @@ int LogStore :: RebuildIndexForOneFile(const int iFileID, const int iOffset,
         return -1;
     }
 
+    // 从前面的偏移量开始处理文件
     int iNowOffset = iOffset;
     bool bNeedTruncate = false;
 
     while (true)
     {
         int iLen = 0;
+        // 读出int型数据保存在iLen中
         ssize_t iReadLen = read(iFd, (char *)&iLen, sizeof(int));
         if (iReadLen == 0)
         {
@@ -646,7 +677,8 @@ int LogStore :: RebuildIndexForOneFile(const int iFileID, const int iOffset,
             iNowFileWriteOffset = iNowOffset;
             break;
         }
-        
+
+        // 读出数据大小不对
         if (iReadLen != (ssize_t)sizeof(int))
         {
             bNeedTruncate = true;
@@ -654,6 +686,7 @@ int LogStore :: RebuildIndexForOneFile(const int iFileID, const int iOffset,
             break;
         }
 
+        // 读出是0的数据，表示读到了文件结尾的地方，终止循环了
         if (iLen == 0)
         {
             PLG1Head("File Data End, fileid %d offset %d", iFileID, iNowOffset);
@@ -661,6 +694,7 @@ int LogStore :: RebuildIndexForOneFile(const int iFileID, const int iOffset,
             break;
         }
 
+        // 检查这个值的范围是否合法
         if (iLen > iFileLen || iLen < (int)sizeof(uint64_t))
         {
             PLG1Err("File data len wrong, data len %d filelen %d",
@@ -669,20 +703,24 @@ int LogStore :: RebuildIndexForOneFile(const int iFileID, const int iOffset,
             break;
         }
 
+        // 根据长度分配缓存，从文件中读取数据到缓存中
         m_oTmpBuffer.Ready(iLen);
         iReadLen = read(iFd, m_oTmpBuffer.GetPtr(), iLen);
+        // 长度不对
         if (iReadLen != iLen)
         {
+            // 需要截断
             bNeedTruncate = true;
             PLG1Err("readlen %zd not qual to %zu, need truncate", iReadLen, iLen);
             break;
         }
 
-
+        // 从前面的缓存中decode实例ID
         uint64_t llInstanceID = 0;
         memcpy(&llInstanceID, m_oTmpBuffer.GetPtr(), sizeof(uint64_t));
 
         //InstanceID must be ascending order.
+        // 如果decode出来的实例ID小于当前的实例ID是不合法的
         if (llInstanceID < llNowInstanceID)
         {
             PLG1Err("File data wrong, read instanceid %lu smaller than now instanceid %lu",
@@ -690,8 +728,10 @@ int LogStore :: RebuildIndexForOneFile(const int iFileID, const int iOffset,
             ret = -1;
             break;
         }
+        // 更新保存的实例ID
         llNowInstanceID = llInstanceID;
 
+        // 剩余的数据decode成AcceptorStateData
         AcceptorStateData oState;
         bool bBufferValid = oState.ParseFromArray(m_oTmpBuffer.GetPtr() + sizeof(uint64_t), iLen - sizeof(uint64_t));
         if (!bBufferValid)
@@ -717,11 +757,13 @@ int LogStore :: RebuildIndexForOneFile(const int iFileID, const int iOffset,
         PLG1Imp("rebuild one index ok, fileid %d offset %d instanceid %lu checksum %u buffer size %zu", 
                 iFileID, iNowOffset, llInstanceID, iFileCheckSum, iLen - sizeof(uint64_t));
 
+        // 继续往下读数据
         iNowOffset += sizeof(int) + iLen; 
     }
     
     close(iFd);
 
+    // 需要截断数据
     if (bNeedTruncate)
     {
         m_oFileLogger.Log("truncate fileid %d offset %d filesize %d", 

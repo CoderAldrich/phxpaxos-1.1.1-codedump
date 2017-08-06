@@ -69,6 +69,7 @@ int Instance :: Init()
         return ret;
     }
 
+    // 先初始化checkpoint管理
     ret = m_oCheckpointMgr.Init();
     if (ret != 0)
     {
@@ -76,6 +77,7 @@ int Instance :: Init()
         return ret;
     }
 
+    // 拿到它的checkpoint实例ID，这个表示当前这个节点已经确定存储的实例ID
     uint64_t llCPInstanceID = m_oCheckpointMgr.GetCheckpointInstanceID() + 1;
 
     PLGImp("Acceptor.OK, Log.InstanceID %lu Checkpoint.InstanceID %lu", 
@@ -84,6 +86,7 @@ int Instance :: Init()
     uint64_t llNowInstanceID = llCPInstanceID;
     if (llNowInstanceID < m_oAcceptor.GetInstanceID())
     {
+        // 如果当前实例ID，小于acceptor的实例ID，那么需要重做日志补齐数据
         ret = PlayLog(llNowInstanceID, m_oAcceptor.GetInstanceID());
         if (ret != 0)
         {
@@ -96,11 +99,13 @@ int Instance :: Init()
     }
     else
     {
+        // 否则说明当前acceptor的状态已经落后了，重置acceptor的状态
         if (llNowInstanceID > m_oAcceptor.GetInstanceID())
         {
             m_oAcceptor.InitForNewPaxosInstance();
         }
-        
+
+        // 保存当前acceptor的状态
         m_oAcceptor.SetInstanceID(llNowInstanceID);
     }
 
@@ -108,8 +113,10 @@ int Instance :: Init()
 
     m_oLearner.SetInstanceID(llNowInstanceID);
     m_oProposer.SetInstanceID(llNowInstanceID);
+    // proposer的下一个提案ID从acceptor已经承诺的ID+1开始
     m_oProposer.SetStartProposalID(m_oAcceptor.GetAcceptorState()->GetPromiseBallot().m_llProposalID + 1);
 
+    // 保存实例ID
     m_oCheckpointMgr.SetMaxChosenInstanceID(llNowInstanceID);
 
     ret = InitLastCheckSum();
@@ -165,6 +172,7 @@ int Instance :: InitLastCheckSum()
     return 0;
 }
 
+// 重做日志：实例ID从llBeginInstanceID，一直重做到llEndInstanceID
 int Instance :: PlayLog(const uint64_t llBeginInstanceID, const uint64_t llEndInstanceID)
 {
     if (llBeginInstanceID < m_oCheckpointMgr.GetMinChosenInstanceID())
@@ -174,8 +182,10 @@ int Instance :: PlayLog(const uint64_t llBeginInstanceID, const uint64_t llEndIn
         return -2;
     }
 
+    // 循环重做
     for (uint64_t llInstanceID = llBeginInstanceID; llInstanceID < llEndInstanceID; llInstanceID++)
     {
+        // 先读出数据
         AcceptorStateData oState; 
         int ret = m_oPaxosLog.ReadState(m_poConfig->GetMyGroupIdx(), llInstanceID, oState);
         if (ret != 0)
@@ -184,6 +194,7 @@ int Instance :: PlayLog(const uint64_t llBeginInstanceID, const uint64_t llEndIn
             return ret;
         }
 
+        // 状态机中执行
         bool bExecuteRet = m_oSMFac.Execute(m_poConfig->GetMyGroupIdx(), llInstanceID, oState.acceptedvalue(), nullptr);
         if (!bExecuteRet)
         {
