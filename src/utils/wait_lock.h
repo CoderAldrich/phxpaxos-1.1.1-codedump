@@ -28,12 +28,14 @@ namespace phxpaxos
 
 #define WAIT_LOCK_USERTIME_AVG_INTERVAL 250
 
+// 用来控制频率的类
 class WaitLock
 {
 public:
     WaitLock();
     ~WaitLock();
 
+    // 尝试lock,返回lock是否成功，usetimems返回拿到锁过程中消耗的ms
     bool Lock(const int iTimeoutMs, int & iUseTimeMs);
 
     void UnLock();
@@ -67,6 +69,7 @@ private:
     int m_iLockUseTimeCount;
 
     int m_iRejectRate;
+    // 等待时间的阈值
     int m_iLockWaitTimeThresholdMS;
 };
     

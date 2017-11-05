@@ -552,6 +552,7 @@ int Instance :: ReceiveMsgForAcceptor(const PaxosMsg & oPaxosMsg, const bool bIs
     {
         //skip success message
         PaxosMsg oNewPaxosMsg = oPaxosMsg;
+        // 为什么这里要修改instanceID？
         oNewPaxosMsg.set_instanceid(m_oAcceptor.GetInstanceID());
         oNewPaxosMsg.set_msgtype(MsgType_PaxosLearner_ProposerSendSuccess);
 

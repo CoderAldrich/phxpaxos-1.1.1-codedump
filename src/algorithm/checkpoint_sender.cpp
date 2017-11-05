@@ -84,7 +84,7 @@ void CheckpointSender :: run()
 
     //pause checkpoint replayer
     bool bNeedContinue = false;
-    // 得到replayer暂停
+    // 等到replayer暂停
     while (!m_poCheckpointMgr->GetReplayer()->IsPaused())
     {
         if (m_bIsEnd)
@@ -171,6 +171,7 @@ void CheckpointSender :: SendCheckpoint()
         return;
     }
 
+    // 为什么要发送两次？？？
     ret = m_poLearner->SendCheckpointBegin(
             m_iSendNodeID, m_llUUID, m_llSequence, 
             m_poSMFac->GetCheckpointInstanceID(m_poConfig->GetMyGroupIdx()));

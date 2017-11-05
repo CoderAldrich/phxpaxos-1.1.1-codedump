@@ -269,7 +269,7 @@ void IOLoop :: DealwithTimeoutOne(const uint32_t iTimerID, const int iType)
     m_poInstance->OnTimeout(iTimerID, iType);
 }
 
-// 处理超时
+// 处理超时，返回下一次超时时间到nexttimeout中返回
 void IOLoop :: DealwithTimeout(int & iNextTimeout)
 {
     bool bHasTimeout = true;

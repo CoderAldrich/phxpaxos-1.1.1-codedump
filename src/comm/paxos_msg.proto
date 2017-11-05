@@ -12,6 +12,7 @@ message Header
 message PaxosMsg
 {
 	required int32 MsgType = 1;
+  // 发送者带来的实例ID，用于对端校验用的
 	optional uint64 InstanceID = 2;
 	optional uint64 NodeID = 3;
 	optional uint64 ProposalID = 4;
@@ -20,6 +21,7 @@ message PaxosMsg
 	optional uint64 PreAcceptID = 7;
 	optional uint64 PreAcceptNodeID = 8;
 	optional uint64 RejectByPromiseID = 9;
+  // 本node的实例ID
 	optional uint64 NowInstanceID = 10;
 	optional uint64 MinChosenInstanceID = 11;
 	optional uint32 LastChecksum = 12;

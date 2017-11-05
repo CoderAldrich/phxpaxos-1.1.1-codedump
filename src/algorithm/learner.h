@@ -200,7 +200,9 @@ private:
     uint32_t m_iAskforlearn_noopTimerID;
     IOLoop * m_poIOLoop;
 
+    // 保存当前看到的最大实例ID
     uint64_t m_llHighestSeenInstanceID;
+    // 这个实例ID是从哪个node同步过来的
     nodeid_t m_iHighestSeenInstanceID_FromNodeID;
 
     bool m_bIsIMLearning;

@@ -40,6 +40,7 @@ WaitLock :: ~WaitLock()
 
 bool WaitLock :: CanLock()
 {
+    // 当前等待的数量太多
     if (m_iMaxWaitLockCount != -1
             && m_iWaitLockCount >= m_iMaxWaitLockCount) 
     {
@@ -47,15 +48,18 @@ bool WaitLock :: CanLock()
         return false;
     }
 
+    // 不设置等待时间
     if (m_iLockWaitTimeThresholdMS == -1)
     {
         return true;
     }
 
+    // 是否大于拒绝的频率
     static std::default_random_engine e_rand;
     return ((int)(e_rand() % 100)) >= m_iRejectRate;
 }
 
+// 更新拒绝频率
 void WaitLock :: RefleshRejectRate(const int iUseTimeMs)
 {
     if (m_iLockWaitTimeThresholdMS == -1)
@@ -98,11 +102,13 @@ void WaitLock :: SetLockWaitTimeThreshold(const int iLockWaitTimeThresholdMS)
     m_iLockWaitTimeThresholdMS = iLockWaitTimeThresholdMS;
 }
 
+// 尝试lock
 bool WaitLock :: Lock(const int iTimeoutMs, int & iUseTimeMs)
 {
     uint64_t llBeginTime = Time::GetSteadyClockMS();
 
     m_oSerialLock.Lock();
+    // 是否能lock？
     if (!CanLock())
     {
         //printf("reject, now rate %d\n", m_iRejectRate);
@@ -111,9 +117,11 @@ bool WaitLock :: Lock(const int iTimeoutMs, int & iUseTimeMs)
         return false;
     }
 
+    // 等待数量+1
     m_iWaitLockCount++;
     bool bGetLock = true;;
 
+    // 循环等待锁释放
     while (m_bIsLockUsing)
     {
         if (iTimeoutMs == -1)
@@ -135,8 +143,10 @@ bool WaitLock :: Lock(const int iTimeoutMs, int & iUseTimeMs)
     m_iWaitLockCount--;
 
     uint64_t llEndTime = Time::GetSteadyClockMS();
+    // 计算中间等待释放锁使用的时间
     iUseTimeMs = llEndTime > llBeginTime ? (int)(llEndTime - llBeginTime) : 0;
 
+    // 刷新拒绝频率
     RefleshRejectRate(iUseTimeMs);
 
     if (bGetLock)

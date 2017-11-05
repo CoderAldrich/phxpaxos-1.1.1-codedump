@@ -137,6 +137,7 @@ const bool LearnerSender :: Prepare(const uint64_t llBeginInstanceID, const node
     m_oLock.Lock();
     
     bool bPrepareRet = false;
+    // 如果当前没有在发送状态，就返回true，表示可以进行同步数据操作
     if (!IsIMSending() && !m_bIsComfirmed)
     {
         bPrepareRet = true;
@@ -161,6 +162,7 @@ const bool LearnerSender :: Comfirm(const uint64_t llBeginInstanceID, const node
     // 只有还在发送而且还没有确定的情况下
     if (IsIMSending() && (!m_bIsComfirmed))
     {
+        // 要求实例ID和nodeid都一致的情况下才confirm
         if (m_llBeginInstanceID == llBeginInstanceID && m_iSendToNodeID == iSendToNodeID)
         {
             bComfirmRet = true;

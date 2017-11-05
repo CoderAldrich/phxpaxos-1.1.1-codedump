@@ -52,6 +52,7 @@ const uint32_t LearnerState :: GetNewChecksum() const
     return m_iNewChecksum;
 }
 
+// 仅仅修改内存中的值，不做持久化
 void LearnerState :: LearnValueWithoutWrite(const uint64_t llInstanceID, 
         const std::string & sValue, const uint32_t iNewChecksum)
 {
@@ -60,6 +61,7 @@ void LearnerState :: LearnValueWithoutWrite(const uint64_t llInstanceID,
     m_iNewChecksum = iNewChecksum;
 }
 
+// 持久化到磁盘，也修改内存中的数据
 int LearnerState :: LearnValue(const uint64_t llInstanceID, const BallotNumber & oLearnedBallot, 
         const std::string & sValue, const uint32_t iLastChecksum)
 {
@@ -208,6 +210,7 @@ void Learner :: SetSeenInstanceID(const uint64_t llInstanceID, const nodeid_t ll
 
 //////////////////////////////////////////////////////////////
 
+// 重置ask for learn定时器
 void Learner :: Reset_AskforLearn_Noop(const int iTimeout)
 {
     if (m_iAskforlearn_noopTimerID > 0)
@@ -226,6 +229,7 @@ void Learner :: AskforLearn_Noop(const bool bIsStart)
 
     m_poCheckpointMgr->ExitCheckpointMode();
 
+    // 为什么这里调用两次
     AskforLearn();
     
     if (bIsStart)
@@ -236,6 +240,8 @@ void Learner :: AskforLearn_Noop(const bool bIsStart)
 
 ///////////////////////////////////////////////////////////////
 
+// 向所有节点广播MsgType_PaxosLearner_AskforLearn消息
+// 这个函数由定时器触发
 void Learner :: AskforLearn()
 {
     BP->GetLearnerBP()->AskforLearn();
@@ -260,6 +266,9 @@ void Learner :: AskforLearn()
     BroadcastMessageToTempNode(oPaxosMsg, Message_SendType_UDP);
 }
 
+// 收到MsgType_PaxosLearner_AskforLearn的处理函数
+// oPaxosMsg.nodeid()告知这个learner，自己当前的实例ID是oPaxosMsg.instanceid()
+// 如果learner的实例ID比这个实例大，那么同步多出来的数据回去
 void Learner :: OnAskforLearn(const PaxosMsg & oPaxosMsg)
 {
     BP->GetLearnerBP()->OnAskforLearn();
@@ -270,6 +279,7 @@ void Learner :: OnAskforLearn(const PaxosMsg & oPaxosMsg)
     
     SetSeenInstanceID(oPaxosMsg.instanceid(), oPaxosMsg.nodeid());
 
+    // 增加一个follower
     if (oPaxosMsg.proposalnodeid() == m_poConfig->GetMyNodeID())
     {
         //Found a node follow me.
@@ -277,6 +287,7 @@ void Learner :: OnAskforLearn(const PaxosMsg & oPaxosMsg)
         m_poConfig->AddFollowerNode(oPaxosMsg.nodeid());
     }
     
+    // 实例ID比自己还大，此时不用同步数据
     if (oPaxosMsg.instanceid() >= GetInstanceID())
     {
         return;
@@ -284,12 +295,14 @@ void Learner :: OnAskforLearn(const PaxosMsg & oPaxosMsg)
 
     if (oPaxosMsg.instanceid() >= m_poCheckpointMgr->GetMinChosenInstanceID())
     {
+        // prepare函数返回false，说明现在在跟其他node进行同步数据操作
         if (!m_oLearnerSender.Prepare(oPaxosMsg.instanceid(), oPaxosMsg.nodeid()))
         {
             BP->GetLearnerBP()->OnAskforLearnGetLockFail();
 
             PLGErr("LearnerSender working for others.");
 
+            // 如果只比现在的实例落后一个，那么就直接同步吧
             if (oPaxosMsg.instanceid() == (GetInstanceID() - 1))
             {
                 PLGImp("InstanceID only difference one, just send this value to other.");
@@ -310,17 +323,22 @@ void Learner :: OnAskforLearn(const PaxosMsg & oPaxosMsg)
     SendNowInstanceID(oPaxosMsg.instanceid(), oPaxosMsg.nodeid());
 }
 
+// 向sendnodeid发送当前的实例ID
 void Learner :: SendNowInstanceID(const uint64_t llInstanceID, const nodeid_t iSendNodeID)
 {
     BP->GetLearnerBP()->SendNowInstanceID();
 
     PaxosMsg oPaxosMsg;
+    // 发送者带来的实例ID，用于对端校验用的
     oPaxosMsg.set_instanceid(llInstanceID);
     oPaxosMsg.set_nodeid(m_poConfig->GetMyNodeID());
     oPaxosMsg.set_msgtype(MsgType_PaxosLearner_SendNowInstanceID);
+    // 本node的实例ID
     oPaxosMsg.set_nowinstanceid(GetInstanceID());
+    // 当前checkpoint的最小实例ID
     oPaxosMsg.set_minchoseninstanceid(m_poCheckpointMgr->GetMinChosenInstanceID());
 
+    // 当前实例ID与发送者的实例ID差别比较大时，才需要同步checkpoint数据
     if ((GetInstanceID() - llInstanceID) > 50)
     {
         //instanceid too close not need to send vsm/master checkpoint. 
@@ -345,6 +363,7 @@ void Learner :: SendNowInstanceID(const uint64_t llInstanceID, const nodeid_t iS
     SendMessage(iSendNodeID, oPaxosMsg);
 }
 
+// 收到MsgType_PaxosLearner_SendNowInstanceID消息的处理
 void Learner :: OnSendNowInstanceID(const PaxosMsg & oPaxosMsg)
 {
     BP->GetLearnerBP()->OnSendNowInstanceID();
@@ -373,12 +392,14 @@ void Learner :: OnSendNowInstanceID(const PaxosMsg & oPaxosMsg)
         }
     }
 
+    // 实例ID已经不相同了，不需要同步数据
     if (oPaxosMsg.instanceid() != GetInstanceID())
     {
         PLGErr("Lag msg, skip");
         return;
     }
 
+    // 对端的实例ID小于自己的，所以也不需要同步了
     if (oPaxosMsg.nowinstanceid() <= GetInstanceID())
     {
         PLGErr("Lag msg, skip");
@@ -392,16 +413,18 @@ void Learner :: OnSendNowInstanceID(const PaxosMsg & oPaxosMsg)
         PLGHead("my instanceid %lu small than other's minchoseninstanceid %lu, other nodeid %lu",
                 GetInstanceID(), oPaxosMsg.minchoseninstanceid(), oPaxosMsg.nodeid());
 
+        // 对方的最小checkpoint实例ID大于自己的实例ID，要求进行checkpoint的同步
         AskforCheckpoint(oPaxosMsg.nodeid());
     }
     else if (!m_bIsIMLearning)
     {
+        // 只有自己不在学习状态时，可以确认需要同步数据了
         ComfirmAskForLearn(oPaxosMsg.nodeid());
     }
 }
 
 ////////////////////////////////////////////
-
+// 向iSendNodeID确认自己需要同步数据
 void Learner :: ComfirmAskForLearn(const nodeid_t iSendNodeID)
 {
     BP->GetLearnerBP()->ComfirmAskForLearn();
@@ -421,12 +444,14 @@ void Learner :: ComfirmAskForLearn(const nodeid_t iSendNodeID)
     m_bIsIMLearning = true;
 }
 
+// 收到MsgType_PaxosLearner_ComfirmAskforLearn消息的处理
 void Learner :: OnComfirmAskForLearn(const PaxosMsg & oPaxosMsg)
 {
     BP->GetLearnerBP()->OnComfirmAskForLearn();
 
     PLGHead("START Msg.InstanceID %lu Msg.from_nodeid %lu", oPaxosMsg.instanceid(), oPaxosMsg.nodeid());
 
+    // confirm失败就直接返回了
     if (!m_oLearnerSender.Comfirm(oPaxosMsg.instanceid(), oPaxosMsg.nodeid()))
     {
         BP->GetLearnerBP()->OnComfirmAskForLearnGetLockFail();
@@ -438,6 +463,7 @@ void Learner :: OnComfirmAskForLearn(const PaxosMsg & oPaxosMsg)
     PLGImp("OK, success comfirm");
 }
 
+// 向iSendNodeID发送数据
 int Learner :: SendLearnValue(
         const nodeid_t iSendNodeID,
         const uint64_t llLearnInstanceID,
@@ -465,6 +491,7 @@ int Learner :: SendLearnValue(
     return SendMessage(iSendNodeID, oPaxosMsg, Message_SendType_TCP);
 }
 
+// 收到MsgType_PaxosLearner_SendLearnValue消息的处理
 void Learner :: OnSendLearnValue(const PaxosMsg & oPaxosMsg)
 {
     BP->GetLearnerBP()->OnSendLearnValue();
@@ -473,6 +500,7 @@ void Learner :: OnSendLearnValue(const PaxosMsg & oPaxosMsg)
             oPaxosMsg.instanceid(), GetInstanceID(), oPaxosMsg.proposalid(), 
             oPaxosMsg.nodeid(), oPaxosMsg.value().size());
 
+    // 只能学习与当前实例ID相同的消息
     if (oPaxosMsg.instanceid() > GetInstanceID())
     {
         PLGDebug("[Latest Msg] i can't learn");
@@ -507,6 +535,7 @@ void Learner :: OnSendLearnValue(const PaxosMsg & oPaxosMsg)
     }
 }
 
+// 应答sendlearnvalue
 void Learner :: SendLearnValue_Ack(const nodeid_t iSendNodeID)
 {
     PLGHead("START LastAck.Instanceid %lu Now.Instanceid %lu", m_llLastAckInstanceID, GetInstanceID());
@@ -564,6 +593,7 @@ void Learner :: TransmitToFollower()
     PLGHead("ok");
 }
 
+// 提议通过时调用该函数
 void Learner :: ProposerSendSuccess(
         const uint64_t llLearnInstanceID,
         const uint64_t llProposalID)
